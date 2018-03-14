@@ -58,7 +58,11 @@ instance FromForm IncomingMessage where
 
 -- Server
 
-type TwilioServerAPI = "api" :> "sms" :> ReqBody '[FormUrlEncoded] IncomingMessage :> Post '[JSON] ()
+type TwilioServerAPI = "api" :> "ping" :> Get '[JSON] String :<|>
+  "api" :> "sms" :> ReqBody '[FormUrlEncoded] IncomingMessage :> Post '[JSON] ()
+
+pingHandler :: Twilio String
+pingHandler = return "Pong"
 
 smsHandler :: IncomingMessage -> Twilio ()
 smsHandler msg = do
@@ -73,7 +77,7 @@ twilioAPI :: Proxy TwilioServerAPI
 twilioAPI = Proxy :: Proxy TwilioServerAPI
 
 twilioServer :: Server TwilioServerAPI
-twilioServer = enter transformToHandler smsHandler
+twilioServer = enter transformToHandler (pingHandler :<|> smsHandler)
 
 runServer :: IO ()
 runServer = do
