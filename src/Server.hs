@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module TwilioServer
+module Server
     ( runServer
     ) where
 
