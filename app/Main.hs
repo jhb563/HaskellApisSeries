@@ -1,6 +1,6 @@
 module Main where
 
-import TwilioServer (runServer)
+import Server (runServer)
 
 main :: IO ()
 main = runServer

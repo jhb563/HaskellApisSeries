@@ -43,7 +43,7 @@ library
     , warp
   exposed-modules:
       Email
-      TwilioServer
+      Server
       Eff.Email
       Eff.SMS
   other-modules:
