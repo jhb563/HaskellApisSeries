@@ -1,11 +1,13 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE TypeOperators     #-}
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module TwilioServer
     ( runServer
     ) where
 
+import Control.Monad.Freer (Eff, Member, runM, runNat)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Proxy (Proxy(..))
@@ -14,20 +16,12 @@ import Network.Wai.Handler.Warp (run)
 import Servant.API
 import Servant.Server
 import System.Environment (getEnv)
-import Twilio
+import Twilio hiding (runTwilio)
 import Twilio.Messages
 import Web.FormUrlEncoded (FromForm(..), Form(..))
 
--- Get Environment Variables
-
-fetchSid :: IO String
-fetchSid = (getEnv "TWILIO_ACCOUNT_SID")
-
-fetchToken :: IO String
-fetchToken = (getEnv "TWILIO_AUTH_TOKEN")
-
-twilioNum :: Text
-twilioNum = "+15559879876"
+import Eff.Email
+import Eff.SMS
 
 -- Sending a Basic Message
 
@@ -61,17 +55,21 @@ instance FromForm IncomingMessage where
 type TwilioServerAPI = "api" :> "ping" :> Get '[JSON] String :<|>
   "api" :> "sms" :> ReqBody '[FormUrlEncoded] IncomingMessage :> Post '[JSON] ()
 
-pingHandler :: Twilio String
+pingHandler :: Eff r String
 pingHandler = return "Pong"
 
-smsHandler :: IncomingMessage -> Twilio ()
-smsHandler msg = do
-  let newMessage = PostMessage (fromNumber msg) twilioNum (body msg)
-  _ <- post newMessage
-  return ()
+smsHandler :: (Member SMS r, Member Email r) => IncomingMessage -> Eff r ()
+smsHandler msg = 
+  case messageToCommand (body msg) of
+    Nothing -> sendText (fromNumber msg) "Sorry, we didn't understand that request!"
+    Just (SubscribeCommand email) -> do
+      _ <- sendSubscribeEmail email
+      return ()
 
-transformToHandler :: Twilio :~> Handler
-transformToHandler = NT $ \action -> liftIO $ runTwilio' fetchSid fetchToken action
+transformToHandler :: (Eff '[Email, SMS, IO]) :~> Handler
+transformToHandler = NT $ \action -> do
+  let ioAct = runM $ runTwilio (runEmail action)
+  liftIO ioAct
 
 twilioAPI :: Proxy TwilioServerAPI
 twilioAPI = Proxy :: Proxy TwilioServerAPI
