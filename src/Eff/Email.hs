@@ -8,10 +8,12 @@ module Eff.Email where
 
 import Control.Monad.Freer (Member, Eff, send, runNat)
 import Data.ByteString.Char8 (pack, ByteString)
+import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
 import Mail.Hailgun
-import System.Environment
+import System.Directory (getCurrentDirectory)
+import System.Environment (getEnv)
 
 data Email a where
   SendSubscribeEmail :: Text -> Email (Either String ())
@@ -27,8 +29,9 @@ runEmail = runNat emailToIO
       domain <- getEnv "MAILGUN_DOMAIN"
       apiKey <- getEnv "MAILGUN_API_KEY"
       replyEmail <- pack <$> getEnv "MAILGUN_REPLY_ADDRESS"
+      currentDir <- getCurrentDirectory
       let context = HailgunContext domain apiKey Nothing
-      case mkSubscribeMessage replyEmail (encodeUtf8 subscriberEmail) of
+      case mkSubscribeMessage replyEmail (encodeUtf8 subscriberEmail) currentDir of
         Left err -> return $ Left err
         Right msg -> do
           result <- sendEmail context msg
@@ -36,12 +39,22 @@ runEmail = runNat emailToIO
             Left err -> return $ Left (show err)
             Right resp -> return $ Right ()
 
-mkSubscribeMessage :: ByteString -> ByteString -> Either HailgunErrorMessage HailgunMessage
-mkSubscribeMessage replyAddress subscriberAddress = hailgunMessage
+mkSubscribeMessage :: ByteString -> ByteString -> FilePath -> Either HailgunErrorMessage HailgunMessage
+mkSubscribeMessage replyAddress subscriberAddress currentDir = hailgunMessage
   "Thanks for signing up!"
   content
   replyAddress 
   (emptyMessageRecipients { recipientsTo = [subscriberAddress] })
-  []
+  [Attachment (rewardFilepath currentDir) (AttachmentBS "Your Reward")]
   where
-    content = TextOnly "Woo thanks for signing up for our mailing list. You're awesome!"
+    content = TextAndHTML 
+      textOnly
+      ("Here's your reward! To confirm your subscription, click " <> link <> "!")
+    textOnly = "Here's your reward! To confirm your subscription, go to "
+      <> "https://haskell-apis.herokuapp.com/api/subscribe/" <> subscriberAddress
+      <> " and we'll sign you up!"
+    link = "<a href=\"https://haskell-apis.herokuapp.com/api/subscribe/" 
+      <> subscriberAddress <> "\">this link</a>"
+
+rewardFilepath :: FilePath -> FilePath
+rewardFilepath currentDir = currentDir ++ "/attachments/reward.txt"

@@ -30,11 +30,17 @@ library
       src
   build-depends:
       base >=4.7 && <5
+    , aeson
     , bytestring
+    , directory
     , freer-effects
     , hailgun
     , http-api-data
+    , monad-logger
     , mtl
+    , persistent
+    , persistent-postgresql
+    , persistent-template
     , servant
     , servant-server
     , text
@@ -43,14 +49,16 @@ library
     , warp
   exposed-modules:
       Email
+      Schema
       Server
+      Eff.Database
       Eff.Email
       Eff.SMS
   other-modules:
       Paths_HaskellApisSeries
   default-language: Haskell2010
 
-executable run-twilio-server
+executable run-server
   main-is: Main.hs
   hs-source-dirs:
       app

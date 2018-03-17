@@ -4,6 +4,7 @@ module Email where
 
 import Data.ByteString.Char8 (pack, ByteString)
 import Mail.Hailgun
+import System.Directory
 import System.Environment
 
 -- Sending Email

@@ -20,6 +20,7 @@ import Twilio hiding (runTwilio)
 import Twilio.Messages
 import Web.FormUrlEncoded (FromForm(..), Form(..))
 
+import Eff.Database
 import Eff.Email
 import Eff.SMS
 
@@ -53,7 +54,8 @@ instance FromForm IncomingMessage where
 -- Server
 
 type TwilioServerAPI = "api" :> "ping" :> Get '[JSON] String :<|>
-  "api" :> "sms" :> ReqBody '[FormUrlEncoded] IncomingMessage :> Post '[JSON] ()
+  "api" :> "sms" :> ReqBody '[FormUrlEncoded] IncomingMessage :> Post '[JSON] () :<|>
+  "api" :> "subscribe" :> Capture "email" Text :> Post '[JSON] ()
 
 pingHandler :: Eff r String
 pingHandler = return "Pong"
@@ -66,16 +68,19 @@ smsHandler msg =
       _ <- sendSubscribeEmail email
       return ()
 
-transformToHandler :: (Eff '[Email, SMS, IO]) :~> Handler
+subscribeHandler :: (Member Database r) => Text -> Eff r ()
+subscribeHandler email = registerUser email
+
+transformToHandler :: (Eff '[Database, Email, SMS, IO]) :~> Handler
 transformToHandler = NT $ \action -> do
-  let ioAct = runM $ runTwilio (runEmail action)
+  let ioAct = runM $ runTwilio (runEmail (runDatabase action))
   liftIO ioAct
 
 twilioAPI :: Proxy TwilioServerAPI
 twilioAPI = Proxy :: Proxy TwilioServerAPI
 
 twilioServer :: Server TwilioServerAPI
-twilioServer = enter transformToHandler (pingHandler :<|> smsHandler)
+twilioServer = enter transformToHandler (pingHandler :<|> smsHandler :<|> subscribeHandler)
 
 runServer :: IO ()
 runServer = do

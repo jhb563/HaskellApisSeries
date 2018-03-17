@@ -1,1 +1,1 @@
-web: run-twilio-server
+web: run-server
