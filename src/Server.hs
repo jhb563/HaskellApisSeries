@@ -55,7 +55,7 @@ instance FromForm IncomingMessage where
 
 type TwilioServerAPI = "api" :> "ping" :> Get '[JSON] String :<|>
   "api" :> "sms" :> ReqBody '[FormUrlEncoded] IncomingMessage :> Post '[JSON] () :<|>
-  "api" :> "subscribe" :> Capture "email" Text :> Post '[JSON] ()
+  "api" :> "subscribe" :> Capture "email" Text :> Get '[JSON] ()
 
 pingHandler :: Eff r String
 pingHandler = return "Pong"
