@@ -9,6 +9,7 @@ module Server
 
 import Control.Monad.Freer (Eff, Member, runM, runNat)
 import Control.Monad.IO.Class (liftIO)
+import Data.ByteString (ByteString)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Proxy (Proxy(..))
 import Data.Text (Text)
@@ -70,6 +71,12 @@ smsHandler msg =
 
 subscribeHandler :: (Member Database r) => Text -> Eff r ()
 subscribeHandler email = registerUser email
+
+emailList :: (Member Database r, Member Email r) => (Text, ByteString, Maybe ByteString) -> Eff r ()
+emailList content = do
+  subscribers <- retrieveSubscribers
+  _ <- sendEmailToList content subscribers
+  return ()
 
 transformToHandler :: (Eff '[Database, Email, SMS, IO]) :~> Handler
 transformToHandler = NT $ \action -> do

@@ -19,7 +19,6 @@ sendMail :: IO ()
 sendMail = do
   domain <- getEnv "MAILGUN_DOMAIN"
   apiKey <- getEnv "MAILGUN_API_KEY"
-  print domain
   replyAddress <- pack <$> getEnv "MAILGUN_REPLY_ADDRESS"
   let context = HailgunContext domain apiKey Nothing
   case mkMessage replyAddress of

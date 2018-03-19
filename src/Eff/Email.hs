@@ -17,27 +17,37 @@ import System.Environment (getEnv)
 
 data Email a where
   SendSubscribeEmail :: Text -> Email (Either String ())
+  SendEmailToList :: (Text, ByteString, Maybe ByteString) -> [Text] -> Email (Either String ())
 
 sendSubscribeEmail :: (Member Email r)  => Text -> Eff r (Either String ())
 sendSubscribeEmail email = send (SendSubscribeEmail email)
+
+sendEmailToList :: (Member Email r) => (Text, ByteString, Maybe ByteString) -> [Text] -> Eff r (Either String ())
+sendEmailToList content subscribers = send (SendEmailToList content subscribers)
 
 runEmail :: (Member IO r) => Eff (Email ': r) a -> Eff r a
 runEmail = runNat emailToIO
   where
     emailToIO :: Email a -> IO a
-    emailToIO (SendSubscribeEmail subscriberEmail) = do
+    emailToIO emailAction = do
       domain <- getEnv "MAILGUN_DOMAIN"
       apiKey <- getEnv "MAILGUN_API_KEY"
       replyEmail <- pack <$> getEnv "MAILGUN_REPLY_ADDRESS"
-      currentDir <- getCurrentDirectory
       let context = HailgunContext domain apiKey Nothing
-      case mkSubscribeMessage replyEmail (encodeUtf8 subscriberEmail) currentDir of
-        Left err -> return $ Left err
-        Right msg -> do
-          result <- sendEmail context msg
-          case result of
-            Left err -> return $ Left (show err)
-            Right resp -> return $ Right ()
+      case emailAction of
+        (SendSubscribeEmail subscriberEmail) -> do
+          currentDir <- getCurrentDirectory
+          sendWithCheck context (mkSubscribeMessage replyEmail (encodeUtf8 subscriberEmail) currentDir)
+        (SendEmailToList content subscribers) -> 
+          sendWithCheck context (mkListMessage replyEmail content subscribers)
+
+    sendWithCheck context eitherMsg = case eitherMsg of
+      Left err -> return $ Left err
+      Right msg -> do
+        result <- sendEmail context msg
+        case result of
+          Left err -> return $ Left (show err)
+          Right resp -> return $ Right ()
 
 mkSubscribeMessage :: ByteString -> ByteString -> FilePath -> Either HailgunErrorMessage HailgunMessage
 mkSubscribeMessage replyAddress subscriberAddress currentDir = hailgunMessage
@@ -58,3 +68,15 @@ mkSubscribeMessage replyAddress subscriberAddress currentDir = hailgunMessage
 
 rewardFilepath :: FilePath -> FilePath
 rewardFilepath currentDir = currentDir ++ "/attachments/reward.txt"
+
+mkListMessage :: ByteString -> (Text, ByteString, Maybe ByteString) -> [Text] -> Either HailgunErrorMessage HailgunMessage
+mkListMessage replyAddress (subject, txtOnly, maybeHTML) subscribers = hailgunMessage
+  subject
+  finalContent
+  replyAddress
+  (emptyMessageRecipients { recipientsBCC = map encodeUtf8 subscribers })
+  []
+  where
+    finalContent = case maybeHTML of
+      Nothing -> TextOnly txtOnly
+      Just html -> TextAndHTML txtOnly html
