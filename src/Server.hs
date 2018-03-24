@@ -21,9 +21,10 @@ import Twilio hiding (runTwilio)
 import Twilio.Messages
 import Web.FormUrlEncoded (FromForm(..), Form(..))
 
-import Eff.Database
 import Eff.Email
 import Eff.SMS
+import Eff.SubscriberList
+import Schema
 
 -- Sending a Basic Message
 
@@ -69,18 +70,31 @@ smsHandler msg =
       _ <- sendSubscribeEmail email
       return ()
 
-subscribeHandler :: (Member Database r) => Text -> Eff r ()
-subscribeHandler email = registerUser email
+subscribeHandler :: (Member SubscriberList r) => Text -> Eff r ()
+subscribeHandler email = do
+  listId <- fetchListId 
+  case listId of
+    Left _ -> error "Failed to find list ID!"
+    Right listId' -> do
+      _ <- subscribeUser listId' (Subscriber email)
+      return ()
 
-emailList :: (Member Database r, Member Email r) => (Text, ByteString, Maybe ByteString) -> Eff r ()
+emailList :: (Member SubscriberList r, Member Email r) => (Text, ByteString, Maybe ByteString) -> Eff r ()
 emailList content = do
-  subscribers <- retrieveSubscribers
-  _ <- sendEmailToList content subscribers
-  return ()
+  listId <- fetchListId 
+  case listId of
+    Left _ -> error "Failed to find list ID!"
+    Right listId' -> do
+      subscribers <- fetchListMembers listId'
+      case subscribers of
+        Left _ -> error "Failed to find subscribers!"
+        Right subscribers' -> do
+          _ <- sendEmailToList content (subscriberEmail <$> subscribers')
+          return ()
 
-transformToHandler :: (Eff '[Database, Email, SMS, IO]) :~> Handler
+transformToHandler :: (Eff '[SubscriberList, Email, SMS, IO]) :~> Handler
 transformToHandler = NT $ \action -> do
-  let ioAct = runM $ runTwilio (runEmail (runDatabase action))
+  let ioAct = runM $ runTwilio (runEmail (runSubscriberList action))
   liftIO ioAct
 
 twilioAPI :: Proxy TwilioServerAPI
